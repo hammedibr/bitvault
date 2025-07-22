@@ -298,3 +298,97 @@
     (ok true)
   )
 )
+
+;; READ-ONLY QUERY FUNCTIONS
+
+;; Protocol ownership verification
+(define-read-only (get-contract-owner)
+  (ok CONTRACT-OWNER)
+)
+
+;; Total protocol liquidity metrics
+(define-read-only (get-stx-pool)
+  (ok (var-get stx-pool))
+)
+
+;; Governance activity tracking
+(define-read-only (get-proposal-count)
+  (ok (var-get proposal-count))
+)
+
+;; PRIVATE UTILITY FUNCTIONS
+
+;; Tier Classification Engine
+(define-private (get-tier-info (stake-amount uint))
+  (if (>= stake-amount u10000000)
+    {
+      tier-level: u3,
+      reward-multiplier: u200,
+    } ;; Gold Tier
+    (if (>= stake-amount u5000000)
+      {
+        tier-level: u2,
+        reward-multiplier: u150,
+      } ;; Silver Tier  
+      {
+        tier-level: u1,
+        reward-multiplier: u100,
+      } ;; Bronze Tier
+    )
+  )
+)
+
+;; Time-Lock Reward Optimization
+(define-private (calculate-lock-multiplier (lock-period uint))
+  (if (>= lock-period u8640) ;; 60-day commitment
+    u150 ;; 1.5x premium multiplier
+    (if (>= lock-period u4320) ;; 30-day commitment
+      u125 ;; 1.25x enhanced multiplier
+      u100 ;; 1.0x base multiplier (flexible)
+    )
+  )
+)
+
+;; Dynamic Reward Calculation Engine
+(define-private (calculate-rewards
+    (user principal)
+    (blocks uint)
+  )
+  (let (
+      (staking-position (unwrap! (map-get? StakingPositions user) u0))
+      (user-position (unwrap! (map-get? UserPositions user) u0))
+      (stake-amount (get amount staking-position))
+      (base-rate (var-get base-reward-rate))
+      (multiplier (get rewards-multiplier user-position))
+    )
+    ;; Compound reward calculation with tier and time-lock bonuses
+    (/ (* (* (* stake-amount base-rate) multiplier) blocks) u14400000)
+  )
+)
+
+;; Input Validation Functions
+
+;; Governance proposal content validation
+(define-private (is-valid-description (desc (string-utf8 256)))
+  (and
+    (>= (len desc) u10) ;; Minimum meaningful description
+    (<= (len desc) u256) ;; Maximum storage limit
+  )
+)
+
+;; Time-lock period validation
+(define-private (is-valid-lock-period (lock-period uint))
+  (or
+    (is-eq lock-period u0) ;; No lock (flexible)
+    (is-eq lock-period u4320) ;; 30-day commitment
+    (is-eq lock-period u8640) ;; 60-day commitment
+  )
+)
+
+;; Governance voting period validation
+(define-private (is-valid-voting-period (period uint))
+  (and
+    (>= period u100) ;; Minimum deliberation time
+    (<= period u2880) ;; Maximum voting window (~1 day)
+  )
+)
